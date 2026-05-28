@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="ca">
 <head>
 <meta charset="UTF-8">
@@ -41,20 +41,17 @@
   #status .barwrap{width:220px;height:4px;background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden}
   #status .bar{height:100%;width:0%;background:var(--brass);transition:width .2s}
 
-  #tag{display:none!important}
-  #tag.show{display:none!important}
+  #tag{position:fixed;top:18px;left:18px;z-index:20;display:none;align-items:center;gap:9px;background:var(--panel);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--line);border-radius:11px;padding:8px 14px;font-size:11px;letter-spacing:.06em;max-width:min(60vw,360px);transition:opacity .35s, transform .35s}
+  #tag.show{display:flex}
   #tag .pulse{width:7px;height:7px;border-radius:50%;background:var(--brass);box-shadow:0 0 9px var(--brass);flex:0 0 auto;animation:pulse 2.4s ease-in-out infinite}
   @keyframes pulse{50%{opacity:.35}}
   #tag .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  #menu-hotspot{display:none!important;pointer-events:none!important}
-
   #dock{position:fixed;left:50%;bottom:18px;z-index:20;display:flex;flex-direction:column;align-items:center;gap:10px;max-width:calc(100vw - 24px);
     transform:translateX(-50%) translateY(160%);opacity:0;pointer-events:none;transition:opacity .38s, transform .45s cubic-bezier(.2,.8,.2,1)}
   #dock.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
-  body.ui-hidden #dock{transform:translateX(-50%) translateY(0);opacity:0;pointer-events:none}
-  body.ui-hidden #dock > *{pointer-events:none}
-  body.ui-hidden #tag{display:none!important;opacity:0;transform:translateY(-16px);pointer-events:none}
+  body.ui-hidden #dock{transform:translateX(-50%) translateY(165%);opacity:0;pointer-events:none}
+  body.ui-hidden #tag{opacity:0;transform:translateY(-16px);pointer-events:none}
 
   #gallery{display:none;align-items:center;gap:8px;max-width:min(820px,calc(100vw - 26px));padding:8px 9px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 18px 50px rgba(0,0,0,.40);pointer-events:auto}
   #gallery.show{display:flex}
@@ -94,11 +91,17 @@
   #dragover p{font-family:"Fraunces",serif;font-size:26px;color:var(--brass-bright)}
   #toast{position:fixed;top:18px;left:50%;transform:translateX(-50%) translateY(-130%);z-index:50;background:#2a1a14;border:1px solid #6e4a30;color:#f0d8c4;padding:11px 18px;border-radius:10px;font-size:12px;transition:transform .4s;max-width:90vw;text-align:center;box-shadow:0 12px 42px rgba(0,0,0,.45)}
   #toast.show{transform:translateX(-50%) translateY(0)}
+
+  #tag,#tag.show{display:none!important}
+  #menu-hotspot{position:fixed;left:0;right:0;bottom:0;height:132px;z-index:18;display:none;background:transparent;pointer-events:auto}
+  body.scene-ready #menu-hotspot{display:block}
+  body:not(.scene-ready) #menu-hotspot{display:none}
   input[type=file]{display:none}
 
   @media (max-width:700px){
     #dock{bottom:12px}.slider{width:100%;justify-content:center}.slider label{width:62px}#intensity,#contrast{width:42vw;max-width:170px}
     .thumb{width:62px;height:40px}#thumbs{max-width:calc(100vw - 132px)}#bar{padding:8px;gap:4px}.ico{width:39px;height:39px}.sep{display:none}
+    #tag{top:12px;left:12px;max-width:calc(100vw - 24px)}
   }
 </style>
 </head>
@@ -109,9 +112,9 @@
   <div class="ring"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.4 4 5.6 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.6-4-9s1.4-6.6 4-9z"/></svg></div>
   <div class="eyebrow">Profunditat automàtica</div>
   <h1>Parallax <em>360°</em></h1>
-  <p class="lede">Puja fotos equirectangulars numerades a la carpeta <strong>fotos/</strong> del repositori i apareixeran automàticament a la galeria. També pots carregar imatges locals. El navegador dedueix la profunditat amb IA i mostra l'escena amb parallax avançat, també en RV quan el dispositiu ho suporta.</p>
+  <p class="lede">Carrega una o diverses fotos equirectangulars. El navegador dedueix la profunditat amb IA, crea una galeria integrada i mostra l'escena amb parallax avançat, també en RV quan el dispositiu ho suporta.</p>
   <button class="btn" id="pick">Tria imatges</button>
-  <p class="note">Per a GitHub Pages: desa les imatges com <strong>fotos/001.jpg</strong>, <strong>fotos/002.jpg</strong>, <strong>fotos/003.jpg</strong>… sense salts. També detecta <strong>fotos/foto-001.jpg</strong> si prefereixes aquest format.</p>
+  <p class="note">El càlcul es fa íntegrament al teu dispositiu. El primer cop es baixa el model (~50 MB) i pot trigar una mica; després queda a la memòria cau del navegador.</p>
 </div>
 
 <div id="status">
@@ -182,19 +185,19 @@ let autoRotateState = 0, autoYaw = 0, autoSpeed = 4.5;
 let xrSession = null, immersiveSupported = false, sbsMode = false;
 let images = [], currentIndex = -1, loadToken = 0, depthPipe = null, depthPipePromise = null, statusOwner = 0, sceneStarted = false;
 let uiTimer = null, uiHover = false, hotHover = false, toastT = null;
+let xrControllers = [], vrHud = null, vrButtons = [], vrRaycaster = null, vrTempMatrix = null, vrHoverButton = null, vrHudUntil = 0;
+const isLikelyQuest = /Quest|OculusBrowser|Meta Quest/i.test(navigator.userAgent || '');
+const MAX_RENDER_PIXEL_RATIO = isLikelyQuest ? 2.2 : 2.5;
+const XR_FRAMEBUFFER_SCALE = isLikelyQuest ? 1.75 : 1.5;
 
 /* ---------- Galeria automàtica del repositori ----------
-   Desa les fotos al repositori així:
-   /fotos/001.jpg
-   /fotos/002.jpg
-   /fotos/003.jpg
-   ...
-   La numeració recomanada és consecutiva, sense salts. Format principal: 001.jpg, 002.jpg... També s'accepta foto-001.jpg.
-   Opcionalment pots crear /fotos/gallery.json amb una llista d'imatges si vols noms lliures.
+   Carpeta recomanada: /fotos/
+   Noms recomanats: 001.jpg, 002.jpg, 003.jpg... També accepta foto-001.jpg.
+   Si vols noms lliures, crea fotos/gallery.json, fotos/galeria.json, gallery.json o galeria.json.
 */
 const REPO_GALLERY = {
   folder: 'fotos/',
-  prefixes: ['','foto-'],
+  prefixes: ['', 'foto-'],
   digits: 3,
   max: 200,
   stopAfterEmpty: 12,
@@ -211,17 +214,20 @@ function initGL(){
 
   camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.03, 2000);
   camera.position.set(0,0,0);
+  scene.add(camera);
 
   stereo = new THREE.StereoCamera();
   stereo.eyeSep = 0.12;
   stereo.aspect = 0.5;
   clock = new THREE.Clock();
 
-  renderer = new THREE.WebGLRenderer({antialias:true});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO));
   renderer.setSize(innerWidth, innerHeight);
   if('outputEncoding' in renderer && THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+  if('outputColorSpace' in renderer && THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.xr.enabled = true;
+  renderer.xr.setFramebufferScaleFactor?.(XR_FRAMEBUFFER_SCALE);
   renderer.xr.setReferenceSpaceType('local');
   renderer.setAnimationLoop(render);
   stage.appendChild(renderer.domElement);
@@ -241,25 +247,196 @@ function resizeRenderer(){
 
 function setupXRControllers(){
   try{
+    xrControllers = [];
+    vrRaycaster = new THREE.Raycaster();
+    vrTempMatrix = new THREE.Matrix4();
     for(let i=0;i<2;i++){
       const controller = renderer.xr.getController(i);
-      controller.addEventListener('connected', () => markInteraction(true));
-      controller.addEventListener('selectstart', () => markInteraction(true));
+      controller.userData.index = i;
+      controller.addEventListener('connected', () => showVRHud(5200));
+      controller.addEventListener('selectstart', () => handleVRSelect(controller));
       controller.addEventListener('selectend', () => scheduleHideUI());
+      const lineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-1)]);
+      const lineMat = new THREE.LineBasicMaterial({color:0xe8c989, transparent:true, opacity:0.34});
+      const line = new THREE.Line(lineGeom, lineMat);
+      line.name = 'vr-ray';
+      line.scale.z = 2.2;
+      controller.add(line);
       scene.add(controller);
+      xrControllers.push(controller);
     }
+    createVRHud();
   }catch(_){/* alguns navegadors no exposen controladors XR */}
+}
+
+function roundRectPath(ctx,x,y,w,h,r){
+  const rr=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+rr,y);
+  ctx.arcTo(x+w,y,x+w,y+h,rr);
+  ctx.arcTo(x+w,y+h,x,y+h,rr);
+  ctx.arcTo(x,y+h,x,y,rr);
+  ctx.arcTo(x,y,x+w,y,rr);
+  ctx.closePath();
+}
+function makeHudTexture(label, opts={}){
+  const w=opts.w||512, h=opts.h||180;
+  const canvas=document.createElement('canvas');
+  canvas.width=w; canvas.height=h;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,w,h);
+  roundRectPath(ctx,8,8,w-16,h-16,opts.radius||28);
+  ctx.fillStyle=opts.bg||'rgba(18,18,22,0.92)';
+  ctx.fill();
+  ctx.lineWidth=opts.lineWidth||4;
+  ctx.strokeStyle=opts.stroke||'rgba(200,164,92,0.62)';
+  ctx.stroke();
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillStyle=opts.fill||'#f2efe8';
+  ctx.font='700 '+(opts.fontSize||46)+'px Space Mono, monospace';
+  ctx.fillText(label, w/2, h/2 + (opts.sub ? -18 : 0));
+  if(opts.sub){
+    ctx.fillStyle=opts.subFill||'#c8a45c';
+    ctx.font='400 '+(opts.subSize||24)+'px Space Mono, monospace';
+    ctx.fillText(opts.sub, w/2, h/2 + 38);
+  }
+  const tex=new THREE.CanvasTexture(canvas);
+  tex.minFilter=THREE.LinearFilter;
+  tex.magFilter=THREE.LinearFilter;
+  tex.needsUpdate=true;
+  return tex;
+}
+function makeHudPlane(texture, w, h, opacity=1){
+  const mat=new THREE.MeshBasicMaterial({map:texture, transparent:true, opacity, side:THREE.FrontSide, depthTest:false, depthWrite:false});
+  const geo=new THREE.PlaneGeometry(w,h);
+  const mesh=new THREE.Mesh(geo,mat);
+  mesh.renderOrder=999;
+  return mesh;
+}
+function createVRHud(){
+  if(vrHud || !camera) return;
+  vrHud = new THREE.Group();
+  vrHud.name = 'controls-vr';
+  vrHud.position.set(0, -0.54, -1.55);
+  vrHud.visible = false;
+  vrButtons = [];
+  const panel = makeHudPlane(makeHudTexture('CONTROLS RV', {w:900,h:430,fontSize:46,sub:'Disparador: mostra o selecciona',subSize:24,bg:'rgba(10,10,12,0.86)',stroke:'rgba(200,164,92,0.42)',radius:34}), 1.72, 0.82, 0.96);
+  panel.position.set(0, 0, -0.025);
+  vrHud.add(panel);
+  const addButton=(label, action, x, y, w=0.29, h=0.15)=>{
+    const tex=makeHudTexture(label,{w:360,h:160,fontSize:36,bg:'rgba(25,25,31,0.96)',stroke:'rgba(232,201,137,0.58)',radius:26});
+    const btn=makeHudPlane(tex,w,h,0.90);
+    btn.position.set(x,y,0.01);
+    btn.userData.vrButton=true;
+    btn.userData.action=action;
+    vrHud.add(btn);
+    vrButtons.push(btn);
+    return btn;
+  };
+  const xs=[-0.62,-0.31,0,0.31,0.62];
+  addButton('ANT','prev',xs[0],0.13);
+  addButton('SEG','next',xs[1],0.13);
+  addButton('GIRA','rotate',xs[2],0.13);
+  addButton('INV','invert',xs[3],0.13);
+  addButton('REFÉS','recompute',xs[4],0.13);
+  addButton('R−','relief-',xs[0],-0.12);
+  addButton('R+','relief+',xs[1],-0.12);
+  addButton('C−','contrast-',xs[2],-0.12);
+  addButton('C+','contrast+',xs[3],-0.12);
+  addButton('SORTIR','exit',xs[4],-0.12);
+  camera.add(vrHud);
+}
+function showVRHud(ms=5200){
+  if(!vrHud) createVRHud();
+  if(!vrHud) return;
+  vrHud.visible=true;
+  vrHudUntil=performance.now()+ms;
+}
+function hideVRHud(){
+  if(vrHud) vrHud.visible=false;
+  vrHudUntil=0;
+  setVRHover(null);
+}
+function setVRHover(btn){
+  if(vrHoverButton===btn) return;
+  for(const b of vrButtons){
+    b.material.opacity = (b===btn) ? 1 : 0.88;
+    b.scale.setScalar(b===btn ? 1.08 : 1);
+  }
+  vrHoverButton=btn;
+}
+function getVRButtonUnderController(controller){
+  if(!vrHud || !vrHud.visible || !vrRaycaster || !controller) return null;
+  controller.updateMatrixWorld(true);
+  vrHud.updateMatrixWorld(true);
+  vrTempMatrix.identity().extractRotation(controller.matrixWorld);
+  vrRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+  vrRaycaster.ray.direction.set(0,0,-1).applyMatrix4(vrTempMatrix);
+  const hits=vrRaycaster.intersectObjects(vrButtons,false);
+  return hits.length ? hits[0].object : null;
+}
+function updateVRHud(){
+  if(!renderer || !renderer.xr.isPresenting || !vrHud) return;
+  const now=performance.now();
+  let hovered=null;
+  if(vrHud.visible){
+    for(const c of xrControllers){
+      hovered=getVRButtonUnderController(c);
+      if(hovered) break;
+    }
+  }
+  if(hovered) vrHudUntil=now+4200;
+  setVRHover(hovered);
+  vrHud.visible = now < vrHudUntil || !!hovered;
+  for(const c of xrControllers){ const ray=c.getObjectByName && c.getObjectByName('vr-ray'); if(ray) ray.visible=vrHud.visible; }
+}
+function nudgeRange(id, delta){
+  const el=$(id);
+  const v=clamp(parseFloat(el.value)+delta, parseFloat(el.min), parseFloat(el.max));
+  el.value=String(Math.round(v*100)/100);
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+}
+function runVRAction(action){
+  if(action==='prev') nextImage(-1);
+  else if(action==='next') nextImage(1);
+  else if(action==='rotate') $('rotate').click();
+  else if(action==='invert') $('invert').click();
+  else if(action==='recompute') $('recompute').click();
+  else if(action==='relief-') nudgeRange('intensity', -0.06);
+  else if(action==='relief+') nudgeRange('intensity', 0.06);
+  else if(action==='contrast-') nudgeRange('contrast', -0.08);
+  else if(action==='contrast+') nudgeRange('contrast', 0.08);
+  else if(action==='exit' && xrSession) xrSession.end();
+  showVRHud(5200);
+}
+function handleVRSelect(controller){
+  if(!renderer || !renderer.xr.isPresenting){ markInteraction(true); return; }
+  const hit=getVRButtonUnderController(controller);
+  showVRHud(6400);
+  if(hit && hit.userData.action) runVRAction(hit.userData.action);
+}
+function isPowerOfTwo(v){ return v && (v & (v - 1)) === 0; }
+function configureColorTexture(tex){
+  if(!tex) return;
+  const img=tex.image || {};
+  const canMipmap = (renderer && renderer.capabilities && renderer.capabilities.isWebGL2) || (isPowerOfTwo(img.width) && isPowerOfTwo(img.height));
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = canMipmap ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+  tex.generateMipmaps = !!canMipmap;
+  tex.wrapS = canMipmap ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  if(renderer && renderer.capabilities && renderer.capabilities.getMaxAnisotropy){ tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); }
+  if('encoding' in tex && THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+  if('colorSpace' in tex && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
 }
 
 function buildSphere(tex, dTex){
   if(!panoRoot) return;
   if(mesh){ panoRoot.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
 
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.ClampToEdgeWrapping;
-  if('encoding' in tex && THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+  configureColorTexture(tex);
 
   let geo, mat;
   if(dTex){
@@ -351,7 +528,7 @@ function buildSphere(tex, dTex){
     });
     parallaxOn = true;
   } else {
-    geo = new THREE.SphereGeometry(R, 96, 64);
+    geo = new THREE.SphereGeometry(R, 192, 96);
     geo.scale(-1,1,1);
     mat = new THREE.MeshBasicMaterial({map:tex, side:THREE.FrontSide});
     parallaxOn = false;
@@ -363,7 +540,7 @@ function buildSphere(tex, dTex){
 
 function addControls(dom){
   dom.addEventListener('pointerdown', e=>{
-    if(e.pointerType === 'mouse') hideUI();
+    markInteraction(true);
     e.preventDefault();
     try{dom.setPointerCapture(e.pointerId);}catch(_){ }
     pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -371,6 +548,7 @@ function addControls(dom){
     else if(pointers.size===2){ dragging=false; const p=[...pointers.values()]; pinchDist=dist(p[0],p[1]); pinchFov=fov; }
   });
   dom.addEventListener('pointermove', e=>{
+    markInteraction();
     px=(e.clientX/innerWidth)*2-1; py=(e.clientY/innerHeight)*2-1;
     if(!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -383,7 +561,7 @@ function addControls(dom){
   });
   const rel=e=>{ pointers.delete(e.pointerId); if(pointers.size<2) pinchDist=0; if(pointers.size===0){ dragging=false; dom.classList.remove('grabbing'); scheduleHideUI(); } };
   dom.addEventListener('pointerup',rel); dom.addEventListener('pointercancel',rel);
-  dom.addEventListener('wheel', e=>{ hideUI(); e.preventDefault(); fov=clamp(fov+e.deltaY*0.05,26,100); camera.fov=fov; camera.updateProjectionMatrix(); }, {passive:false});
+  dom.addEventListener('wheel', e=>{ markInteraction(true); e.preventDefault(); fov=clamp(fov+e.deltaY*0.05,26,100); camera.fov=fov; camera.updateProjectionMatrix(); }, {passive:false});
 }
 
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
@@ -410,6 +588,7 @@ function render(){
   if(panoRoot){ panoRoot.rotation.y = THREE.MathUtils.degToRad(autoYaw); }
 
   if(renderer.xr.isPresenting){
+    updateVRHud();
     renderer.setScissorTest(false);
     renderer.autoClear = true;
     renderer.render(scene,camera);
@@ -470,22 +649,17 @@ function startScene(name){
   dropScr.classList.add('hide');
   sceneStarted = true;
   $('dock').classList.add('show');
+  document.body.classList.add('scene-ready');
   // Sense etiqueta a dalt a l'esquerra: la fotografia es controla des de la galeria inferior.
-  document.body.classList.add('scene-ready','ui-hidden');
-  updateMenuVisibility();
-}
-function updateMenuVisibility(){
-  clearTimeout(uiTimer);
-  if(!sceneStarted) return;
-  const keepVisible = uiHover || $('status').classList.contains('show');
-  document.body.classList.toggle('ui-hidden', !keepVisible);
+  showMenu();
+  hideMenuSoon(2600);
 }
 function showMenu(){
   if(!sceneStarted) return;
   clearTimeout(uiTimer);
   document.body.classList.remove('ui-hidden');
 }
-function hideMenuSoon(delay=60){
+function hideMenuSoon(delay=80){
   clearTimeout(uiTimer);
   if(!sceneStarted) return;
   uiTimer=setTimeout(()=>{
@@ -497,206 +671,152 @@ function pointerInsideDock(e){
   return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
 }
 function markInteraction(force=false){
-  // El moviment general ja no fa aparèixer el menú: només es mostra quan el cursor és sobre el menú.
-  if(force) updateMenuVisibility();
-}
-function hideUI(){
   if(!sceneStarted) return;
-  uiHover = false;
-  clearTimeout(uiTimer);
-  if(!$('status').classList.contains('show')) document.body.classList.add('ui-hidden');
+  if(renderer && renderer.xr && renderer.xr.isPresenting){ showVRHud(force ? 5600 : 3200); return; }
+  if(uiHover || hotHover || $('status').classList.contains('show')) showMenu();
+  else hideMenuSoon(force ? 70 : 50);
 }
 function scheduleHideUI(){ hideMenuSoon(); }
-const dockEl = $('dock');
+const dockEl=$('dock');
+const hotEl=$('menu-hotspot');
 dockEl.addEventListener('pointerenter',()=>{ uiHover=true; showMenu(); });
 dockEl.addEventListener('pointermove',()=>{ uiHover=true; showMenu(); });
 dockEl.addEventListener('pointerdown',()=>{ uiHover=true; showMenu(); });
-dockEl.addEventListener('pointerleave',()=>{ uiHover=false; hideMenuSoon(40); });
+dockEl.addEventListener('pointerleave',()=>{ uiHover=false; hideMenuSoon(50); });
 dockEl.addEventListener('focusin',()=>{ uiHover=true; showMenu(); });
-dockEl.addEventListener('focusout',()=>{ uiHover=false; hideMenuSoon(40); });
+dockEl.addEventListener('focusout',()=>{ uiHover=false; hideMenuSoon(50); });
+hotEl.addEventListener('pointerenter',()=>{ hotHover=true; showMenu(); hideMenuSoon(1400); });
+hotEl.addEventListener('pointermove',()=>{ hotHover=true; showMenu(); hideMenuSoon(1400); });
+hotEl.addEventListener('pointerleave',()=>{ hotHover=false; hideMenuSoon(80); });
 document.addEventListener('mousemove', e=>{
   if(!sceneStarted || uiHover) return;
-  if(pointerInsideDock(e)) showMenu();
-  else hideMenuSoon(40);
+  if(pointerInsideDock(e)){ uiHover=true; showMenu(); }
+  else hideMenuSoon(50);
 },{passive:true});
 document.addEventListener('touchstart', e=>{
   if(!sceneStarted || uiHover) return;
   const t=e.touches && e.touches[0];
-  if(t && t.clientY > innerHeight - 150){
+  if(t && t.clientY > innerHeight - 170){
+    hotHover=true;
     showMenu();
-    hideMenuSoon(1600);
+    setTimeout(()=>{ hotHover=false; hideMenuSoon(80); }, 1700);
   }
 },{passive:true});
 
 /* ---------- Galeria ---------- */
 function makeId(){ const c = globalThis.crypto; return (c && c.randomUUID) ? c.randomUUID() : 'img-'+Date.now()+'-'+Math.random().toString(16).slice(2); }
 function currentItem(){ return images[currentIndex] || null; }
-function cleanPath(path){
-  return String(path || '').trim().replace(/\\/g,'/');
-}
-function titleFromPath(path){
-  const base = cleanPath(path).split('?')[0].split('#')[0].split('/').filter(Boolean).pop() || 'imatge';
-  const name = base.replace(/\.[^.]+$/,'').replace(/[-_]+/g,' ').trim();
-  return name || base;
-}
-function resolveRepoPath(src, base=document.baseURI){
-  src = cleanPath(src);
-  if(!src) return '';
-  if(/^https?:\/\//i.test(src) || src.startsWith('/')) return new URL(src, document.baseURI).href;
-  if(src.startsWith('./') || src.startsWith('../')) return new URL(src, base).href;
-  if(src.includes('/')) return new URL(src, document.baseURI).href;
-  return new URL(REPO_GALLERY.folder + src, document.baseURI).href;
-}
-function normalizeGalleryEntry(entry, base=document.baseURI){
-  let src='', title='';
-  if(typeof entry === 'string') src = entry;
-  else if(entry && typeof entry === 'object'){
-    src = entry.src || entry.url || entry.file || entry.path || '';
-    title = entry.title || entry.name || entry.alt || entry.caption || '';
-  }
-  if(!cleanPath(src)) return null;
-  const url = resolveRepoPath(src, base);
-  return {id:makeId(), file:null, name:title || titleFromPath(src), url, source:'repo'};
-}
-function normaliseGalleryItem(raw){
-  const url = raw.url || raw.src || '';
-  return {
-    id: raw.id || makeId(),
-    file: raw.file || null,
-    name: raw.name || raw.title || titleFromPath(url) || 'imatge',
-    url,
-    tex: null,
-    depthCanvas: null,
-    depthTex: null,
-    status: 'new',
-    source: raw.source || 'local'
-  };
-}
-function addGalleryItems(items, options={}){
-  const existing = new Set(images.map(item => {
-    try{ return new URL(item.url, document.baseURI).href; }
-    catch(_){ return item.url; }
-  }));
-  const clean = [];
-  for(const item of items){
-    if(!item || !(item.url || item.src)) continue;
-    const normal = normaliseGalleryItem(item);
-    if(!normal.url) continue;
-    const key = (()=>{ try{ return new URL(normal.url, document.baseURI).href; }catch(_){ return normal.url; } })();
-    if(options.skipDuplicates !== false && existing.has(key)) continue;
-    existing.add(key);
-    clean.push(normal);
-  }
-  if(!clean.length) return 0;
-  const startAt = images.length;
-  images.push(...clean);
-  renderGallery();
-  if(currentIndex < 0) selectImage(startAt);
-  else if(!options.silent){
-    const n = clean.length;
-    toast(n === 1 ? 'Imatge afegida a la galeria.' : n+' imatges afegides a la galeria.');
-    markInteraction(true);
-  }
-  return clean.length;
-}
 function addFiles(fileList){
   const files = [...fileList].filter(f=>f && f.type && f.type.startsWith('image/'));
-  if(!files.length){ toast('Carrega una o diverses imatges equirectangulars JPG, PNG o WebP.'); return; }
-  addGalleryItems(files.map(file=>({file, name:file.name || 'imatge', url:URL.createObjectURL(file), source:'local'})), {skipDuplicates:false});
-}
-async function imageExists(src){
-  if(location.protocol === 'file:') return false;
-  const url = new URL(src, document.baseURI).href;
-  try{
-    const res = await fetch(url, {method:'HEAD', cache:'no-cache'});
-    if(res.ok){
-      const type = (res.headers.get('content-type') || '').toLowerCase();
-      return !type || type.startsWith('image/') || type.includes('octet-stream') || /\.(jpe?g|png|webp|avif)$/i.test(url);
-    }
-    if(res.status !== 405) return false;
-  }catch(_){
-    // Alguns servidors no responen bé a HEAD; provem amb Image com a reserva.
+  if(!files.length){ toast('Carrega una o diverses imatges equirectangulars JPG o PNG.'); return; }
+  const startAt = images.length;
+  for(const file of files){
+    images.push({id:makeId(), file, name:file.name || 'imatge', url:URL.createObjectURL(file), tex:null, depthCanvas:null, depthTex:null, status:'new'});
   }
-  return new Promise(resolve=>{
-    const img = new Image();
-    const done = ok => { img.onload = img.onerror = null; clearTimeout(timer); resolve(ok); };
-    const timer = setTimeout(()=>done(false), 3500);
-    img.onload = () => done(true);
-    img.onerror = () => done(false);
-    img.src = url + (url.includes('?') ? '&' : '?') + 'v=' + Date.now();
-  });
-}
-async function readManifestGallery(){
-  if(location.protocol === 'file:') return {entries:[], manifest:null};
-  for(const manifestPath of REPO_GALLERY.manifests){
-    try{
-      const manifestUrl = new URL(manifestPath, document.baseURI).href;
-      const res = await fetch(manifestUrl, {cache:'no-cache'});
-      if(!res.ok) continue;
-      const data = await res.json();
-      const raw = Array.isArray(data) ? data : (Array.isArray(data.images) ? data.images : (Array.isArray(data.photos) ? data.photos : []));
-      const entries = raw.map(entry => normalizeGalleryEntry(entry, manifestUrl)).filter(Boolean);
-      if(entries.length) return {entries, manifest:manifestPath};
-    }catch(_){
-      // Si no hi ha manifest o no és JSON vàlid, es prova la numeració automàtica.
-    }
-  }
-  return {entries:[], manifest:null};
-}
-function repoStem(n){ return String(n).padStart(REPO_GALLERY.digits, '0'); }
-function repoPath(n, ext, prefix=REPO_GALLERY.prefixes[0]){ return REPO_GALLERY.folder.replace(/\/+$/,'') + '/' + prefix + repoStem(n) + '.' + ext; }
-async function findRepoImage(n){
-  for(const prefix of REPO_GALLERY.prefixes){
-    for(const ext of REPO_GALLERY.extensions){
-      const url = repoPath(n, ext, prefix);
-      if(await imageExists(url)){
-        return {id:'repo-'+prefix+repoStem(n), name:titleFromPath(url), url, source:'repo'};
-      }
-    }
-  }
-  return null;
-}
-async function discoverNumberedGallery(){
-  const found = [];
-  let emptyRun = 0;
-  for(let i=1; i<=REPO_GALLERY.max; i++){
-    const item = await findRepoImage(i);
-    if(item){
-      found.push(item);
-      emptyRun = 0;
-    } else {
-      emptyRun++;
-      if(found.length === 0 && emptyRun >= 3) break;
-      if(found.length > 0 && emptyRun >= REPO_GALLERY.stopAfterEmpty) break;
-    }
-  }
-  return found;
-}
-async function loadRepositoryGallery(){
-  if(location.protocol === 'file:') return;
-  const token = 'repo-gallery';
-  showStatus('Buscant fotos del repositori…', token);
-  try{
-    const manifest = await readManifestGallery();
-    let entries = manifest.entries;
-    let source = manifest.manifest;
-    if(!entries.length){
-      entries = await discoverNumberedGallery();
-      source = REPO_GALLERY.folder;
-    }
-    hideStatus(token);
-    if(entries.length && images.length === 0){
-      const added = addGalleryItems(entries, {silent:true});
-      if(added){
-        toast(source && source !== REPO_GALLERY.folder ? `Galeria carregada des de ${source}.` : (added === 1 ? 'S\'ha carregat 1 imatge del repositori.' : 'S\'han carregat '+added+' imatges del repositori.'));
-      }
-    }
-  }catch(e){
-    hideStatus(token);
-    console.warn('No s\'ha pogut carregar la galeria del repositori:', e);
-  }
+  renderGallery();
+  if(currentIndex < 0) selectImage(startAt);
+  else { toast(files.length === 1 ? 'Imatge afegida a la galeria.' : files.length+' imatges afegides a la galeria.'); markInteraction(true); }
 }
 
+function fileNameFromUrl(url){
+  try{
+    const clean=String(url).split('?')[0].split('#')[0];
+    return decodeURIComponent(clean.substring(clean.lastIndexOf('/')+1)) || 'imatge';
+  }catch(_){ return 'imatge'; }
+}
+function resolveGallerySrc(src, base){
+  src=String(src||'').trim();
+  if(!src) return '';
+  if(/^(https?:|data:|blob:|\/)/i.test(src)) return src;
+  if(src.includes('/') || !base) return src;
+  return base + src;
+}
+function normalizeGalleryData(data, base=''){
+  const list = Array.isArray(data) ? data : (data && Array.isArray(data.images) ? data.images : []);
+  return list.map((entry, i)=>{
+    if(typeof entry === 'string'){
+      const src=resolveGallerySrc(entry, base);
+      return {src, title:fileNameFromUrl(src)};
+    }
+    if(entry && typeof entry === 'object'){
+      const src=resolveGallerySrc(entry.src || entry.url || entry.file || '', base);
+      return {src, title:entry.title || entry.name || fileNameFromUrl(src) || ('Foto '+String(i+1).padStart(3,'0'))};
+    }
+    return null;
+  }).filter(x=>x && x.src);
+}
+function addGalleryItems(items, source='repo'){
+  const known=new Set(images.map(x=>x.url));
+  const startAt=images.length;
+  let added=0;
+  for(const it of items){
+    const url=it.src || it.url;
+    if(!url || known.has(url)) continue;
+    known.add(url);
+    images.push({id:makeId(), name:it.title || fileNameFromUrl(url), url, tex:null, depthCanvas:null, depthTex:null, status:'new', source});
+    added++;
+  }
+  if(!added) return;
+  renderGallery();
+  if(currentIndex < 0) selectImage(startAt);
+  else toast(added===1 ? 'Foto del repositori afegida a la galeria.' : added+' fotos del repositori afegides a la galeria.');
+}
+async function tryFetchJSON(path){
+  try{
+    const r=await fetch(path,{cache:'no-store'});
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(_){ return null; }
+}
+async function loadManifestGallery(){
+  for(const path of REPO_GALLERY.manifests){
+    const data=await tryFetchJSON(path);
+    if(!data) continue;
+    const base=path.includes('/') ? path.replace(/[^/]+$/,'') : '';
+    const items=normalizeGalleryData(data, base);
+    if(items.length) return items;
+  }
+  return [];
+}
+async function urlExists(url){
+  try{
+    let r=await fetch(url,{method:'HEAD',cache:'no-store'});
+    if(r.ok) return true;
+    if(r.status===405){
+      r=await fetch(url,{method:'GET',cache:'no-store'});
+      return r.ok;
+    }
+  }catch(_){ }
+  return false;
+}
+async function scanNumberedGallery(){
+  const items=[];
+  let emptyRun=0;
+  for(let i=1; i<=REPO_GALLERY.max && emptyRun<REPO_GALLERY.stopAfterEmpty; i++){
+    const n=String(i).padStart(REPO_GALLERY.digits,'0');
+    let found=null;
+    search: for(const prefix of REPO_GALLERY.prefixes){
+      for(const ext of REPO_GALLERY.extensions){
+        const src=REPO_GALLERY.folder+prefix+n+'.'+ext;
+        if(await urlExists(src)){
+          found={src, title:'Foto '+n};
+          break search;
+        }
+      }
+    }
+    if(found){ items.push(found); emptyRun=0; }
+    else emptyRun++;
+  }
+  return items;
+}
+async function initRepoGallery(){
+  try{
+    const manifest=await loadManifestGallery();
+    if(manifest.length){ addGalleryItems(manifest,'manifest'); return; }
+    const scanned=await scanNumberedGallery();
+    if(scanned.length) addGalleryItems(scanned,'repo');
+  }catch(_){ /* pot ser un entorn local sense servidor */ }
+}
 function renderGallery(){
   const thumbs=$('thumbs');
   thumbs.innerHTML='';
@@ -712,7 +832,6 @@ function renderGallery(){
     const im=document.createElement('img');
     im.src=item.url;
     im.alt='';
-    im.loading='lazy';
     b.appendChild(im);
     b.onclick=()=>selectImage(i);
     thumbs.appendChild(b);
@@ -887,11 +1006,13 @@ document.addEventListener('keydown', e=>{
 
 /* ---------- WebXR + visió estèreo ---------- */
 const xrBtn=$('xr');
+let xrSupportPromise = null;
 if(navigator.xr && navigator.xr.isSessionSupported){
-  navigator.xr.isSessionSupported('immersive-vr').then(ok=>{
+  xrSupportPromise = navigator.xr.isSessionSupported('immersive-vr').then(ok=>{
     immersiveSupported = !!ok;
     xrBtn.title = ok ? 'Entra en realitat virtual' : 'Visió estèreo en pantalla';
-  }).catch(()=>{ immersiveSupported=false; xrBtn.title='Visió estèreo en pantalla'; });
+    return immersiveSupported;
+  }).catch(()=>{ immersiveSupported=false; xrBtn.title='Visió estèreo en pantalla'; return false; });
 } else {
   xrBtn.title='Visió estèreo en pantalla';
 }
@@ -899,28 +1020,43 @@ function updateXRButton(){ xrBtn.classList.toggle('on', !!xrSession || sbsMode);
 function toggleSbs(force){
   sbsMode = typeof force === 'boolean' ? force : !sbsMode;
   updateXRButton();
-  toast(sbsMode ? 'Visió estèreo en pantalla activada.' : 'Visió estèreo en pantalla desactivada.');
+  toast(sbsMode ? 'Visió estèreo en pantalla activada. Per a Quest és millor usar WebXR real.' : 'Visió estèreo en pantalla desactivada.');
   markInteraction(true);
+}
+async function startImmersiveVR(){
+  if(!navigator.xr) throw new Error('WebXR no disponible en aquest navegador.');
+  renderer.xr.setFramebufferScaleFactor?.(XR_FRAMEBUFFER_SCALE);
+  const s=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});
+  xrSession=s;
+  sbsMode=false;
+  await renderer.xr.setSession(s);
+  renderer.setAnimationLoop(render);
+  updateXRButton();
+  document.body.classList.add('ui-hidden');
+  showVRHud(7600);
+  toast('RV iniciada: WebXR renderitza una vista separada per a cada ull. Prem el disparador per mostrar els controls.');
+  s.addEventListener('visibilitychange',()=>{ renderer.setAnimationLoop(render); showVRHud(3600); });
+  s.addEventListener('end',()=>{
+    xrSession=null;
+    hideVRHud();
+    renderer.setAnimationLoop(render);
+    updateXRButton();
+    markInteraction(true);
+  });
 }
 xrBtn.onclick=async ()=>{
   if(!renderer || !sceneStarted){ toast('Primer carrega una imatge.'); return; }
   if(xrSession){ xrSession.end(); return; }
-  if(!immersiveSupported){ toggleSbs(); return; }
-  try{
-    sbsMode=false;
-    renderer.xr.setFramebufferScaleFactor?.(1.25);
-    const s=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});
-    xrSession=s;
-    await renderer.xr.setSession(s);
-    updateXRButton();
-    document.body.classList.add('ui-hidden');
-    toast('RV iniciada: WebXR genera una vista separada per a cada ull.');
-    s.addEventListener('selectstart',()=>markInteraction(true));
-    s.addEventListener('end',()=>{ xrSession=null; updateXRButton(); markInteraction(true); });
-  }catch(e){
-    toast('No s\'ha pogut iniciar la RV. S\'activa la visió estèreo en pantalla.');
-    toggleSbs(true);
+  if(navigator.xr){
+    try{
+      if(xrSupportPromise) await xrSupportPromise;
+      await startImmersiveVR();
+      return;
+    }catch(e){
+      console.warn('No s’ha pogut iniciar WebXR immersiu:', e);
+    }
   }
+  toggleSbs(true);
 };
 
 /* ---------- Arrossegar i deixar anar ---------- */
@@ -929,10 +1065,9 @@ addEventListener('dragenter',e=>{e.preventDefault();dd++;dragOv.classList.add('s
 addEventListener('dragover',e=>e.preventDefault());
 addEventListener('dragleave',e=>{e.preventDefault();if(--dd<=0){dd=0;dragOv.classList.remove('show');}});
 addEventListener('drop',e=>{e.preventDefault();dd=0;dragOv.classList.remove('show');addFiles(e.dataTransfer.files);});
-
-
-// Intenta carregar automàticament les fotos del repositori quan la pàgina s'obre.
-loadRepositoryGallery().catch(()=>{});
+addEventListener('focus',()=>{ if(renderer) renderer.setAnimationLoop(render); });
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden && renderer) renderer.setAnimationLoop(render); });
+initRepoGallery();
 </script>
 </body>
 </html>

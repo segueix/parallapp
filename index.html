@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Parallax 360 · galeria automàtica i RV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{--bg:#0a0a0c;--panel:rgba(18,18,22,.76);--panel2:rgba(12,12,15,.58);--line:rgba(200,164,92,.22);--brass:#c8a45c;--brass-bright:#e8c989;--ink:#f2efe8;--muted:#8a877e;--danger:#f0a38f}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:"Space Mono",monospace;-webkit-tap-highlight-color:transparent}
+  #stage{position:fixed;inset:0;touch-action:none;background:#000}
+  canvas{display:block;cursor:grab;touch-action:none}
+  canvas.grabbing{cursor:grabbing}
+
+  #drop{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px;z-index:30;
+    background:radial-gradient(120% 90% at 50% -10%,rgba(200,164,92,.10),transparent 60%),#0a0a0c;transition:opacity .5s}
+  #drop.hide{opacity:0;pointer-events:none}
+  .ring{width:110px;height:110px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;margin-bottom:30px;position:relative;animation:spin 26s linear infinite}
+  .ring::after{content:"";position:absolute;top:-4px;left:50%;width:7px;height:7px;margin-left:-3.5px;border-radius:50%;background:var(--brass-bright);box-shadow:0 0 12px var(--brass-bright)}
+  .ring svg{width:44px;height:44px;stroke:var(--brass);fill:none;stroke-width:1.3}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .eyebrow{font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--brass);margin-bottom:16px}
+  h1{font-family:"Fraunces",serif;font-weight:500;font-size:clamp(32px,7vw,58px);line-height:1;letter-spacing:-.01em;margin-bottom:16px}
+  h1 em{font-style:italic;color:var(--brass-bright)}
+  .lede{max-width:520px;font-size:13.5px;line-height:1.7;color:var(--muted);margin-bottom:30px}
+  .btn{appearance:none;border:1px solid var(--brass);background:transparent;color:var(--brass-bright);font-family:"Space Mono",monospace;font-size:13px;letter-spacing:.16em;text-transform:uppercase;padding:15px 30px;border-radius:2px;cursor:pointer;transition:.25s}
+  .btn:hover{background:var(--brass);color:#0a0a0c;box-shadow:0 0 26px rgba(200,164,92,.35)}
+  .note{margin-top:24px;font-size:10.5px;letter-spacing:.06em;color:var(--muted);max-width:520px;line-height:1.6}
+
+  #status{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:35;display:none;flex-direction:column;align-items:center;gap:16px;
+    background:var(--panel);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:16px;padding:30px 38px;text-align:center;max-width:80vw;box-shadow:0 20px 70px rgba(0,0,0,.55)}
+  #status.show{display:flex}
+  #status .spinner{width:34px;height:34px;border:2px solid rgba(200,164,92,.25);border-top-color:var(--brass-bright);border-radius:50%;animation:rot .9s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+  #status .msg{font-size:12.5px;letter-spacing:.04em;color:var(--ink)}
+  #status .pct{font-size:11px;color:var(--muted);max-width:min(380px,70vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #status .barwrap{width:220px;height:4px;background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden}
+  #status .bar{height:100%;width:0%;background:var(--brass);transition:width .2s}
+
+  #tag{display:none!important}
+  #tag.show{display:none!important}
+  #tag .pulse{width:7px;height:7px;border-radius:50%;background:var(--brass);box-shadow:0 0 9px var(--brass);flex:0 0 auto;animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  #tag .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  #menu-hotspot{display:none!important;pointer-events:none!important}
+
+  #dock{position:fixed;left:50%;bottom:18px;z-index:20;display:flex;flex-direction:column;align-items:center;gap:10px;max-width:calc(100vw - 24px);
+    transform:translateX(-50%) translateY(160%);opacity:0;pointer-events:none;transition:opacity .38s, transform .45s cubic-bezier(.2,.8,.2,1)}
+  #dock.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
+  body.ui-hidden #dock{transform:translateX(-50%) translateY(0);opacity:0;pointer-events:none}
+  body.ui-hidden #dock > *{pointer-events:none}
+  body.ui-hidden #tag{display:none!important;opacity:0;transform:translateY(-16px);pointer-events:none}
+
+  #gallery{display:none;align-items:center;gap:8px;max-width:min(820px,calc(100vw - 26px));padding:8px 9px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 18px 50px rgba(0,0,0,.40);pointer-events:auto}
+  #gallery.show{display:flex}
+  #thumbs{display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;max-width:min(640px,calc(100vw - 154px));padding:1px 2px 4px;scrollbar-width:thin;scrollbar-color:var(--brass) transparent}
+  #thumbs::-webkit-scrollbar{height:4px}
+  #thumbs::-webkit-scrollbar-thumb{background:var(--brass);border-radius:4px}
+  .thumb{appearance:none;border:1px solid rgba(255,255,255,.14);background:#050506;width:74px;height:46px;border-radius:9px;overflow:hidden;position:relative;flex:0 0 auto;cursor:pointer;transition:.18s;box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;filter:saturate(.86) contrast(.98)}
+  .thumb:hover{transform:translateY(-2px);border-color:rgba(232,201,137,.72)}
+  .thumb.active{border-color:var(--brass-bright);box-shadow:0 0 0 2px rgba(232,201,137,.25),0 10px 22px rgba(0,0,0,.35)}
+  .thumb.ready::before{content:"";position:absolute;right:5px;top:5px;width:7px;height:7px;border-radius:50%;background:var(--brass-bright);box-shadow:0 0 9px var(--brass-bright)}
+  .thumb.processing::after{content:"";position:absolute;right:5px;top:5px;width:10px;height:10px;border:1.5px solid rgba(255,255,255,.34);border-top-color:var(--brass-bright);border-radius:50%;animation:rot .8s linear infinite;background:rgba(0,0,0,.25)}
+  .thumb.error::before{content:"";position:absolute;right:5px;top:5px;width:8px;height:8px;border-radius:50%;background:var(--danger);box-shadow:0 0 8px var(--danger)}
+  .gico{appearance:none;border:none;background:transparent;color:var(--ink);width:36px;height:36px;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.18s;flex:0 0 auto}
+  .gico:hover{background:rgba(200,164,92,.14);color:var(--brass-bright)}
+  .gico:disabled{opacity:.28;cursor:default}
+  .gico svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+  #bar{display:flex;align-items:center;gap:6px;background:var(--panel);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--line);border-radius:14px;padding:9px 11px;
+    box-shadow:0 18px 50px rgba(0,0,0,.55);max-width:calc(100vw - 28px);flex-wrap:wrap;justify-content:center;pointer-events:auto}
+  .ico{appearance:none;border:none;background:transparent;color:var(--ink);width:42px;height:42px;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.18s;flex:0 0 auto}
+  .ico:hover{background:rgba(200,164,92,.14);color:var(--brass-bright)}
+  .ico.on{background:var(--brass);color:#0a0a0c}
+  .ico.left svg{transform:scaleX(-1)}
+  .ico svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .ico[hidden]{display:none}
+  .sep{width:1px;height:26px;background:var(--line);margin:0 4px;flex:0 0 auto}
+  .slider{display:flex;align-items:center;gap:9px;padding:0 8px;flex:0 0 auto}
+  .slider label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  #intensity,#contrast{appearance:none;width:96px;height:4px;border-radius:4px;cursor:pointer;background:linear-gradient(var(--brass),var(--brass)) no-repeat,rgba(255,255,255,.15);background-size:70% 100%}
+  #intensity::-webkit-slider-thumb,#contrast::-webkit-slider-thumb{appearance:none;width:14px;height:14px;border-radius:50%;background:var(--brass-bright);box-shadow:0 0 8px rgba(200,164,92,.6);cursor:pointer}
+  #intensity::-moz-range-thumb,#contrast::-moz-range-thumb{width:14px;height:14px;border:none;border-radius:50%;background:var(--brass-bright);cursor:pointer}
+
+  #dragover{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(10,10,12,.85);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  #dragover.show{display:flex}
+  #dragover .box{border:1.5px dashed var(--brass);border-radius:16px;padding:54px 70px;text-align:center}
+  #dragover p{font-family:"Fraunces",serif;font-size:26px;color:var(--brass-bright)}
+  #toast{position:fixed;top:18px;left:50%;transform:translateX(-50%) translateY(-130%);z-index:50;background:#2a1a14;border:1px solid #6e4a30;color:#f0d8c4;padding:11px 18px;border-radius:10px;font-size:12px;transition:transform .4s;max-width:90vw;text-align:center;box-shadow:0 12px 42px rgba(0,0,0,.45)}
+  #toast.show{transform:translateX(-50%) translateY(0)}
+  input[type=file]{display:none}
+
+  @media (max-width:700px){
+    #dock{bottom:12px}.slider{width:100%;justify-content:center}.slider label{width:62px}#intensity,#contrast{width:42vw;max-width:170px}
+    .thumb{width:62px;height:40px}#thumbs{max-width:calc(100vw - 132px)}#bar{padding:8px;gap:4px}.ico{width:39px;height:39px}.sep{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div id="drop">
+  <div class="ring"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.4 4 5.6 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.6-4-9s1.4-6.6 4-9z"/></svg></div>
+  <div class="eyebrow">Profunditat automàtica</div>
+  <h1>Parallax <em>360°</em></h1>
+  <p class="lede">Puja fotos equirectangulars numerades a la carpeta <strong>fotos/</strong> del repositori i apareixeran automàticament a la galeria. També pots carregar imatges locals. El navegador dedueix la profunditat amb IA i mostra l'escena amb parallax avançat, també en RV quan el dispositiu ho suporta.</p>
+  <button class="btn" id="pick">Tria imatges</button>
+  <p class="note">Per a GitHub Pages: desa les imatges com <strong>fotos/001.jpg</strong>, <strong>fotos/002.jpg</strong>, <strong>fotos/003.jpg</strong>… sense salts. També detecta <strong>fotos/foto-001.jpg</strong> si prefereixes aquest format.</p>
+</div>
+
+<div id="status">
+  <div class="spinner"></div>
+  <div class="msg" id="st-msg">Carregant…</div>
+  <div class="barwrap"><div class="bar" id="st-bar"></div></div>
+  <div class="pct" id="st-pct"></div>
+</div>
+
+<div id="tag" aria-hidden="true"><i class="pulse"></i><span class="nm"></span></div>
+<div id="menu-hotspot" aria-hidden="true"></div>
+
+<div id="dock">
+  <div id="gallery" aria-label="Galeria">
+    <button class="gico" id="prev" title="Imatge anterior" aria-label="Imatge anterior">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <div id="thumbs"></div>
+    <button class="gico" id="next" title="Imatge següent" aria-label="Imatge següent">
+      <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+  </div>
+
+  <div id="bar">
+    <div class="slider"><label>Relleu</label><input type="range" id="intensity" min="0" max="0.95" step="0.01" value="0.7"></div>
+    <div class="slider"><label>Contrast</label><input type="range" id="contrast" min="0.3" max="1.5" step="0.01" value="0.55"></div>
+    <button class="ico" id="invert" title="Inverteix la profunditat" aria-label="Inverteix la profunditat">
+      <svg viewBox="0 0 24 24"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg>
+    </button>
+    <div class="sep"></div>
+    <button class="ico" id="recompute" title="Recalcula la profunditat" aria-label="Recalcula la profunditat">
+      <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 109-9 9 9 0 00-7 3.3M5 3v3.3h3.3"/></svg>
+    </button>
+    <button class="ico" id="rotate" title="Rotació automàtica" aria-label="Rotació automàtica">
+      <svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0112-5"/><path d="M17 4v4h-4"/><path d="M19 12a7 7 0 01-12 5"/><path d="M7 20v-4h4"/></svg>
+    </button>
+    <button class="ico ico-xr" id="xr" title="Entra en realitat virtual" aria-label="Entra en realitat virtual">
+      <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="3.2"/><circle cx="8" cy="12" r="2.1"/><circle cx="16" cy="12" r="2.1"/><path d="M11 12h2"/></svg>
+    </button>
+    <button class="ico" id="full" title="Pantalla completa" aria-label="Pantalla completa">
+      <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+    <div class="sep"></div>
+    <button class="ico" id="open" title="Afegeix imatges a la galeria" aria-label="Afegeix imatges a la galeria">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </div>
+</div>
+
+<div id="dragover"><div class="box"><p>Deixa anar les imatges aquí</p></div></div>
+<div id="toast"></div>
+<input type="file" id="file" accept="image/*" multiple>
+
+<script type="module">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
+env.allowLocalModels = false;
+
+const $ = id => document.getElementById(id);
+const stage = $('stage'), dropScr = $('drop'), fileInput = $('file');
+const R = 12;
+let renderer, scene, camera, panoRoot, mesh, stereo, clock;
+let colorTex = null, depthTex = null;
+let lon = 0, lat = 0, fov = 72, dragging = false, sx = 0, sy = 0, slon = 0, slat = 0, px = 0, py = 0;
+const pointers = new Map();
+let pinchDist = 0, pinchFov = 0;
+let curIntensity = 0.7, curInvert = false, curGamma = 0.55, parallaxOn = false;
+let autoRotateState = 0, autoYaw = 0, autoSpeed = 4.5;
+let xrSession = null, immersiveSupported = false, sbsMode = false;
+let images = [], currentIndex = -1, loadToken = 0, depthPipe = null, depthPipePromise = null, statusOwner = 0, sceneStarted = false;
+let uiTimer = null, uiHover = false, hotHover = false, toastT = null;
+
+/* ---------- Galeria automàtica del repositori ----------
+   Desa les fotos al repositori així:
+   /fotos/001.jpg
+   /fotos/002.jpg
+   /fotos/003.jpg
+   ...
+   La numeració recomanada és consecutiva, sense salts. Format principal: 001.jpg, 002.jpg... També s'accepta foto-001.jpg.
+   Opcionalment pots crear /fotos/gallery.json amb una llista d'imatges si vols noms lliures.
+*/
+const REPO_GALLERY = {
+  folder: 'fotos/',
+  prefixes: ['','foto-'],
+  digits: 3,
+  max: 200,
+  stopAfterEmpty: 12,
+  manifests: ['fotos/gallery.json','fotos/galeria.json','gallery.json','galeria.json'],
+  extensions: ['jpg','jpeg','png','webp','avif']
+};
+
+/* ---------- Three.js ---------- */
+function initGL(){
+  if(renderer) return;
+  scene = new THREE.Scene();
+  panoRoot = new THREE.Group();
+  scene.add(panoRoot);
+
+  camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.03, 2000);
+  camera.position.set(0,0,0);
+
+  stereo = new THREE.StereoCamera();
+  stereo.eyeSep = 0.12;
+  stereo.aspect = 0.5;
+  clock = new THREE.Clock();
+
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(innerWidth, innerHeight);
+  if('outputEncoding' in renderer && THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType('local');
+  renderer.setAnimationLoop(render);
+  stage.appendChild(renderer.domElement);
+
+  addControls(renderer.domElement);
+  setupXRControllers();
+  addEventListener('resize', resizeRenderer);
+  resizeRenderer();
+}
+
+function resizeRenderer(){
+  if(!renderer || !camera) return;
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+
+function setupXRControllers(){
+  try{
+    for(let i=0;i<2;i++){
+      const controller = renderer.xr.getController(i);
+      controller.addEventListener('connected', () => markInteraction(true));
+      controller.addEventListener('selectstart', () => markInteraction(true));
+      controller.addEventListener('selectend', () => scheduleHideUI());
+      scene.add(controller);
+    }
+  }catch(_){/* alguns navegadors no exposen controladors XR */}
+}
+
+function buildSphere(tex, dTex){
+  if(!panoRoot) return;
+  if(mesh){ panoRoot.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
+
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  if('encoding' in tex && THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+
+  let geo, mat;
+  if(dTex){
+    geo = new THREE.SphereGeometry(R, 420, 220);
+    geo.scale(-1,1,1);
+    dTex.minFilter = THREE.LinearFilter;
+    dTex.magFilter = THREE.LinearFilter;
+    dTex.wrapS = THREE.RepeatWrapping;
+    dTex.wrapT = THREE.ClampToEdgeWrapping;
+    dTex.needsUpdate = true;
+
+    mat = new THREE.ShaderMaterial({
+      uniforms:{
+        map:{value:tex},
+        depthMap:{value:dTex},
+        depthScale:{value:curIntensity},
+        invert:{value:curInvert?1:0},
+        gamma:{value:curGamma},
+        R:{value:R},
+        depthTexel:{value:new THREE.Vector2(1 / Math.max(1, dTex.image.width || 1), 1 / Math.max(1, dTex.image.height || 1))}
+      },
+      vertexShader:[
+        'varying vec2 vUv;',
+        'varying float vDepth;',
+        'varying vec3 vWorldPos;',
+        'varying vec3 vNormalObj;',
+        'uniform sampler2D depthMap;',
+        'uniform vec2 depthTexel;',
+        'uniform float depthScale;',
+        'uniform float invert;',
+        'uniform float gamma;',
+        'uniform float R;',
+        'float rd(vec2 uv){',
+        '  uv.x = fract(uv.x);',
+        '  uv.y = clamp(uv.y, 0.001, 0.999);',
+        '  float v = texture2D(depthMap, uv).r;',
+        '  if(invert > 0.5) v = 1.0 - v;',
+        '  return pow(clamp(v, 0.0, 1.0), gamma);',
+        '}',
+        'void main(){',
+        '  vUv = uv;',
+        '  vec2 tx = depthTexel;',
+        '  float c = rd(uv);',
+        '  float l = rd(uv + vec2(-tx.x, 0.0));',
+        '  float r = rd(uv + vec2( tx.x, 0.0));',
+        '  float u = rd(uv + vec2(0.0,  tx.y));',
+        '  float d = rd(uv + vec2(0.0, -tx.y));',
+        '  float avg = (c * 4.0 + l + r + u + d) / 8.0;',
+        '  float grad = abs(c-l) + abs(c-r) + abs(c-u) + abs(c-d);',
+        '  float edgeFade = 1.0 - smoothstep(0.08, 0.35, grad);',
+        '  float dep = mix(avg * 0.74, avg, edgeFade);',
+        '  dep = smoothstep(0.02, 0.98, dep);',
+        '  float poleFade = smoothstep(0.015, 0.08, uv.y) * (1.0 - smoothstep(0.92, 0.985, uv.y));',
+        '  dep *= mix(0.70, 1.0, poleFade);',
+        '  float radius = R - dep * depthScale * 4.9;',
+        '  vec3 n = normalize(position);',
+        '  vec3 p = n * radius;',
+        '  vec4 wp = modelMatrix * vec4(p, 1.0);',
+        '  vWorldPos = wp.xyz;',
+        '  vNormalObj = n;',
+        '  vDepth = dep;',
+        '  gl_Position = projectionMatrix * viewMatrix * wp;',
+        '}'
+      ].join('\n'),
+      fragmentShader:[
+        'varying vec2 vUv;',
+        'varying float vDepth;',
+        'varying vec3 vWorldPos;',
+        'varying vec3 vNormalObj;',
+        'uniform sampler2D map;',
+        'uniform float depthScale;',
+        'void main(){',
+        '  vec3 n = normalize(vNormalObj);',
+        '  vec3 tangentSeed = vec3(-n.z, 0.0, n.x);',
+        '  if(length(tangentSeed) < 0.01) tangentSeed = vec3(1.0, 0.0, 0.0);',
+        '  vec3 t = normalize(tangentSeed);',
+        '  vec3 b = normalize(cross(n, t));',
+        '  vec3 view = normalize(cameraPosition - vWorldPos);',
+        '  vec2 viewShift = vec2(dot(view, t), dot(view, b));',
+        '  float poleFade = smoothstep(0.04, 0.12, vUv.y) * (1.0 - smoothstep(0.88, 0.96, vUv.y));',
+        '  vec2 uv = vUv + viewShift * (vDepth - 0.45) * depthScale * 0.018 * poleFade;',
+        '  uv.x = fract(uv.x);',
+        '  uv.y = clamp(uv.y, 0.001, 0.999);',
+        '  vec4 col = texture2D(map, uv);',
+        '  gl_FragColor = vec4(col.rgb, 1.0);',
+        '}'
+      ].join('\n'),
+      side:THREE.FrontSide
+    });
+    parallaxOn = true;
+  } else {
+    geo = new THREE.SphereGeometry(R, 96, 64);
+    geo.scale(-1,1,1);
+    mat = new THREE.MeshBasicMaterial({map:tex, side:THREE.FrontSide});
+    parallaxOn = false;
+  }
+  mesh = new THREE.Mesh(geo, mat);
+  panoRoot.add(mesh);
+  updateUniforms();
+}
+
+function addControls(dom){
+  dom.addEventListener('pointerdown', e=>{
+    if(e.pointerType === 'mouse') hideUI();
+    e.preventDefault();
+    try{dom.setPointerCapture(e.pointerId);}catch(_){ }
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pointers.size===1){ dragging=true; sx=e.clientX; sy=e.clientY; slon=lon; slat=lat; dom.classList.add('grabbing'); }
+    else if(pointers.size===2){ dragging=false; const p=[...pointers.values()]; pinchDist=dist(p[0],p[1]); pinchFov=fov; }
+  });
+  dom.addEventListener('pointermove', e=>{
+    px=(e.clientX/innerWidth)*2-1; py=(e.clientY/innerHeight)*2-1;
+    if(!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pointers.size>=2){
+      const p=[...pointers.values()], d=dist(p[0],p[1]);
+      if(pinchDist>0){ fov=clamp(pinchFov*(pinchDist/d),26,100); camera.fov=fov; camera.updateProjectionMatrix(); }
+      return;
+    }
+    if(dragging){ lon=slon+(sx-e.clientX)*0.11; lat=clamp(slat+(e.clientY-sy)*0.11,-85,85); }
+  });
+  const rel=e=>{ pointers.delete(e.pointerId); if(pointers.size<2) pinchDist=0; if(pointers.size===0){ dragging=false; dom.classList.remove('grabbing'); scheduleHideUI(); } };
+  dom.addEventListener('pointerup',rel); dom.addEventListener('pointercancel',rel);
+  dom.addEventListener('wheel', e=>{ hideUI(); e.preventDefault(); fov=clamp(fov+e.deltaY*0.05,26,100); camera.fov=fov; camera.updateProjectionMatrix(); }, {passive:false});
+}
+
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+function updateDesktopCamera(){
+  if(parallaxOn && !dragging){
+    camera.position.x += (px*0.34 - camera.position.x)*0.08;
+    camera.position.y += (-py*0.30 - camera.position.y)*0.08;
+    camera.position.z += (0 - camera.position.z)*0.08;
+  } else if(!parallaxOn){
+    camera.position.x += (0 - camera.position.x)*0.12;
+    camera.position.y += (0 - camera.position.y)*0.12;
+    camera.position.z += (0 - camera.position.z)*0.12;
+  }
+  const phi=THREE.MathUtils.degToRad(90-lat), the=THREE.MathUtils.degToRad(lon);
+  camera.lookAt(new THREE.Vector3(R*Math.sin(phi)*Math.cos(the), R*Math.cos(phi), R*Math.sin(phi)*Math.sin(the)));
+}
+
+function render(){
+  if(!renderer) return;
+  const dt = Math.min(clock ? clock.getDelta() : 0.016, 0.05);
+  if(autoRotateState !== 0 && panoRoot){ autoYaw += autoRotateState * autoSpeed * dt; }
+  if(panoRoot){ panoRoot.rotation.y = THREE.MathUtils.degToRad(autoYaw); }
+
+  if(renderer.xr.isPresenting){
+    renderer.setScissorTest(false);
+    renderer.autoClear = true;
+    renderer.render(scene,camera);
+    return;
+  }
+
+  updateDesktopCamera();
+  if(sbsMode){
+    const size = new THREE.Vector2();
+    renderer.getSize(size);
+    stereo.update(camera);
+    renderer.setScissorTest(true);
+    renderer.autoClear = false;
+    renderer.clear(true,true,true);
+    renderer.setViewport(0,0,size.x/2,size.y);
+    renderer.setScissor(0,0,size.x/2,size.y);
+    renderer.render(scene, stereo.cameraL);
+    renderer.setViewport(size.x/2,0,size.x/2,size.y);
+    renderer.setScissor(size.x/2,0,size.x/2,size.y);
+    renderer.render(scene, stereo.cameraR);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0,0,size.x,size.y);
+    renderer.autoClear = true;
+  } else {
+    renderer.setScissorTest(false);
+    renderer.autoClear = true;
+    renderer.render(scene,camera);
+  }
+}
+
+/* ---------- Estat / UI ---------- */
+function showStatus(msg, owner=loadToken){
+  statusOwner = owner;
+  $('st-msg').textContent=msg;
+  $('st-pct').textContent='';
+  $('st-bar').style.width='0%';
+  $('status').classList.add('show');
+}
+function setPct(p, label='', owner=statusOwner){
+  if(owner !== statusOwner) return;
+  $('st-bar').style.width=(p||0)+'%';
+  $('st-pct').textContent=label||'';
+}
+function hideStatus(owner=statusOwner){
+  if(owner !== statusOwner) return;
+  $('status').classList.remove('show');
+}
+function toast(m){
+  const t=$('toast');
+  t.textContent=m;
+  t.classList.add('show');
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>t.classList.remove('show'),4300);
+}
+function startScene(name){
+  lon=0; lat=0; fov=72;
+  if(camera){ camera.fov=72; camera.updateProjectionMatrix(); }
+  dropScr.classList.add('hide');
+  sceneStarted = true;
+  $('dock').classList.add('show');
+  // Sense etiqueta a dalt a l'esquerra: la fotografia es controla des de la galeria inferior.
+  document.body.classList.add('scene-ready','ui-hidden');
+  updateMenuVisibility();
+}
+function updateMenuVisibility(){
+  clearTimeout(uiTimer);
+  if(!sceneStarted) return;
+  const keepVisible = uiHover || $('status').classList.contains('show');
+  document.body.classList.toggle('ui-hidden', !keepVisible);
+}
+function showMenu(){
+  if(!sceneStarted) return;
+  clearTimeout(uiTimer);
+  document.body.classList.remove('ui-hidden');
+}
+function hideMenuSoon(delay=60){
+  clearTimeout(uiTimer);
+  if(!sceneStarted) return;
+  uiTimer=setTimeout(()=>{
+    if(!uiHover && !$('status').classList.contains('show')) document.body.classList.add('ui-hidden');
+  }, delay);
+}
+function pointerInsideDock(e){
+  const r = $('dock').getBoundingClientRect();
+  return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+}
+function markInteraction(force=false){
+  // El moviment general ja no fa aparèixer el menú: només es mostra quan el cursor és sobre el menú.
+  if(force) updateMenuVisibility();
+}
+function hideUI(){
+  if(!sceneStarted) return;
+  uiHover = false;
+  clearTimeout(uiTimer);
+  if(!$('status').classList.contains('show')) document.body.classList.add('ui-hidden');
+}
+function scheduleHideUI(){ hideMenuSoon(); }
+const dockEl = $('dock');
+dockEl.addEventListener('pointerenter',()=>{ uiHover=true; showMenu(); });
+dockEl.addEventListener('pointermove',()=>{ uiHover=true; showMenu(); });
+dockEl.addEventListener('pointerdown',()=>{ uiHover=true; showMenu(); });
+dockEl.addEventListener('pointerleave',()=>{ uiHover=false; hideMenuSoon(40); });
+dockEl.addEventListener('focusin',()=>{ uiHover=true; showMenu(); });
+dockEl.addEventListener('focusout',()=>{ uiHover=false; hideMenuSoon(40); });
+document.addEventListener('mousemove', e=>{
+  if(!sceneStarted || uiHover) return;
+  if(pointerInsideDock(e)) showMenu();
+  else hideMenuSoon(40);
+},{passive:true});
+document.addEventListener('touchstart', e=>{
+  if(!sceneStarted || uiHover) return;
+  const t=e.touches && e.touches[0];
+  if(t && t.clientY > innerHeight - 150){
+    showMenu();
+    hideMenuSoon(1600);
+  }
+},{passive:true});
+
+/* ---------- Galeria ---------- */
+function makeId(){ const c = globalThis.crypto; return (c && c.randomUUID) ? c.randomUUID() : 'img-'+Date.now()+'-'+Math.random().toString(16).slice(2); }
+function currentItem(){ return images[currentIndex] || null; }
+function cleanPath(path){
+  return String(path || '').trim().replace(/\\/g,'/');
+}
+function titleFromPath(path){
+  const base = cleanPath(path).split('?')[0].split('#')[0].split('/').filter(Boolean).pop() || 'imatge';
+  const name = base.replace(/\.[^.]+$/,'').replace(/[-_]+/g,' ').trim();
+  return name || base;
+}
+function resolveRepoPath(src, base=document.baseURI){
+  src = cleanPath(src);
+  if(!src) return '';
+  if(/^https?:\/\//i.test(src) || src.startsWith('/')) return new URL(src, document.baseURI).href;
+  if(src.startsWith('./') || src.startsWith('../')) return new URL(src, base).href;
+  if(src.includes('/')) return new URL(src, document.baseURI).href;
+  return new URL(REPO_GALLERY.folder + src, document.baseURI).href;
+}
+function normalizeGalleryEntry(entry, base=document.baseURI){
+  let src='', title='';
+  if(typeof entry === 'string') src = entry;
+  else if(entry && typeof entry === 'object'){
+    src = entry.src || entry.url || entry.file || entry.path || '';
+    title = entry.title || entry.name || entry.alt || entry.caption || '';
+  }
+  if(!cleanPath(src)) return null;
+  const url = resolveRepoPath(src, base);
+  return {id:makeId(), file:null, name:title || titleFromPath(src), url, source:'repo'};
+}
+function normaliseGalleryItem(raw){
+  const url = raw.url || raw.src || '';
+  return {
+    id: raw.id || makeId(),
+    file: raw.file || null,
+    name: raw.name || raw.title || titleFromPath(url) || 'imatge',
+    url,
+    tex: null,
+    depthCanvas: null,
+    depthTex: null,
+    status: 'new',
+    source: raw.source || 'local'
+  };
+}
+function addGalleryItems(items, options={}){
+  const existing = new Set(images.map(item => {
+    try{ return new URL(item.url, document.baseURI).href; }
+    catch(_){ return item.url; }
+  }));
+  const clean = [];
+  for(const item of items){
+    if(!item || !(item.url || item.src)) continue;
+    const normal = normaliseGalleryItem(item);
+    if(!normal.url) continue;
+    const key = (()=>{ try{ return new URL(normal.url, document.baseURI).href; }catch(_){ return normal.url; } })();
+    if(options.skipDuplicates !== false && existing.has(key)) continue;
+    existing.add(key);
+    clean.push(normal);
+  }
+  if(!clean.length) return 0;
+  const startAt = images.length;
+  images.push(...clean);
+  renderGallery();
+  if(currentIndex < 0) selectImage(startAt);
+  else if(!options.silent){
+    const n = clean.length;
+    toast(n === 1 ? 'Imatge afegida a la galeria.' : n+' imatges afegides a la galeria.');
+    markInteraction(true);
+  }
+  return clean.length;
+}
+function addFiles(fileList){
+  const files = [...fileList].filter(f=>f && f.type && f.type.startsWith('image/'));
+  if(!files.length){ toast('Carrega una o diverses imatges equirectangulars JPG, PNG o WebP.'); return; }
+  addGalleryItems(files.map(file=>({file, name:file.name || 'imatge', url:URL.createObjectURL(file), source:'local'})), {skipDuplicates:false});
+}
+async function imageExists(src){
+  if(location.protocol === 'file:') return false;
+  const url = new URL(src, document.baseURI).href;
+  try{
+    const res = await fetch(url, {method:'HEAD', cache:'no-cache'});
+    if(res.ok){
+      const type = (res.headers.get('content-type') || '').toLowerCase();
+      return !type || type.startsWith('image/') || type.includes('octet-stream') || /\.(jpe?g|png|webp|avif)$/i.test(url);
+    }
+    if(res.status !== 405) return false;
+  }catch(_){
+    // Alguns servidors no responen bé a HEAD; provem amb Image com a reserva.
+  }
+  return new Promise(resolve=>{
+    const img = new Image();
+    const done = ok => { img.onload = img.onerror = null; clearTimeout(timer); resolve(ok); };
+    const timer = setTimeout(()=>done(false), 3500);
+    img.onload = () => done(true);
+    img.onerror = () => done(false);
+    img.src = url + (url.includes('?') ? '&' : '?') + 'v=' + Date.now();
+  });
+}
+async function readManifestGallery(){
+  if(location.protocol === 'file:') return {entries:[], manifest:null};
+  for(const manifestPath of REPO_GALLERY.manifests){
+    try{
+      const manifestUrl = new URL(manifestPath, document.baseURI).href;
+      const res = await fetch(manifestUrl, {cache:'no-cache'});
+      if(!res.ok) continue;
+      const data = await res.json();
+      const raw = Array.isArray(data) ? data : (Array.isArray(data.images) ? data.images : (Array.isArray(data.photos) ? data.photos : []));
+      const entries = raw.map(entry => normalizeGalleryEntry(entry, manifestUrl)).filter(Boolean);
+      if(entries.length) return {entries, manifest:manifestPath};
+    }catch(_){
+      // Si no hi ha manifest o no és JSON vàlid, es prova la numeració automàtica.
+    }
+  }
+  return {entries:[], manifest:null};
+}
+function repoStem(n){ return String(n).padStart(REPO_GALLERY.digits, '0'); }
+function repoPath(n, ext, prefix=REPO_GALLERY.prefixes[0]){ return REPO_GALLERY.folder.replace(/\/+$/,'') + '/' + prefix + repoStem(n) + '.' + ext; }
+async function findRepoImage(n){
+  for(const prefix of REPO_GALLERY.prefixes){
+    for(const ext of REPO_GALLERY.extensions){
+      const url = repoPath(n, ext, prefix);
+      if(await imageExists(url)){
+        return {id:'repo-'+prefix+repoStem(n), name:titleFromPath(url), url, source:'repo'};
+      }
+    }
+  }
+  return null;
+}
+async function discoverNumberedGallery(){
+  const found = [];
+  let emptyRun = 0;
+  for(let i=1; i<=REPO_GALLERY.max; i++){
+    const item = await findRepoImage(i);
+    if(item){
+      found.push(item);
+      emptyRun = 0;
+    } else {
+      emptyRun++;
+      if(found.length === 0 && emptyRun >= 3) break;
+      if(found.length > 0 && emptyRun >= REPO_GALLERY.stopAfterEmpty) break;
+    }
+  }
+  return found;
+}
+async function loadRepositoryGallery(){
+  if(location.protocol === 'file:') return;
+  const token = 'repo-gallery';
+  showStatus('Buscant fotos del repositori…', token);
+  try{
+    const manifest = await readManifestGallery();
+    let entries = manifest.entries;
+    let source = manifest.manifest;
+    if(!entries.length){
+      entries = await discoverNumberedGallery();
+      source = REPO_GALLERY.folder;
+    }
+    hideStatus(token);
+    if(entries.length && images.length === 0){
+      const added = addGalleryItems(entries, {silent:true});
+      if(added){
+        toast(source && source !== REPO_GALLERY.folder ? `Galeria carregada des de ${source}.` : (added === 1 ? 'S\'ha carregat 1 imatge del repositori.' : 'S\'han carregat '+added+' imatges del repositori.'));
+      }
+    }
+  }catch(e){
+    hideStatus(token);
+    console.warn('No s\'ha pogut carregar la galeria del repositori:', e);
+  }
+}
+
+function renderGallery(){
+  const thumbs=$('thumbs');
+  thumbs.innerHTML='';
+  images.forEach((item,i)=>{
+    const b=document.createElement('button');
+    b.className='thumb';
+    if(i===currentIndex) b.classList.add('active');
+    if(item.status==='ready') b.classList.add('ready');
+    if(item.status==='processing') b.classList.add('processing');
+    if(item.status==='error') b.classList.add('error');
+    b.title=item.name;
+    b.setAttribute('aria-label', item.name);
+    const im=document.createElement('img');
+    im.src=item.url;
+    im.alt='';
+    im.loading='lazy';
+    b.appendChild(im);
+    b.onclick=()=>selectImage(i);
+    thumbs.appendChild(b);
+  });
+  $('gallery').classList.toggle('show', images.length>0);
+  $('prev').disabled = images.length < 2;
+  $('next').disabled = images.length < 2;
+  requestAnimationFrame(()=>thumbs.querySelector('.thumb.active')?.scrollIntoView({block:'nearest', inline:'center', behavior:'smooth'}));
+}
+async function selectImage(index){
+  if(index<0 || index>=images.length) return;
+  initGL();
+  const token = ++loadToken;
+  currentIndex = index;
+  const item = images[index];
+  renderGallery();
+  try{
+    colorTex = item.tex || await loadTex(item.url);
+    if(token !== loadToken) return;
+    item.tex = colorTex;
+    depthTex = item.depthTex;
+    buildSphere(colorTex, depthTex || null);
+    startScene(item.name);
+    if(item.depthTex){
+      toast('Parallax recuperat de la galeria.');
+      hideStatus(token);
+    } else {
+      ensureDepth(item, token, false);
+    }
+  }catch(e){
+    item.status='error';
+    renderGallery();
+    toast('No s\'ha pogut carregar la imatge: '+(e.message||e));
+  }
+}
+function nextImage(dir){
+  if(images.length < 2) return;
+  const n = (currentIndex + dir + images.length) % images.length;
+  selectImage(n);
+}
+$('prev').onclick=()=>nextImage(-1);
+$('next').onclick=()=>nextImage(1);
+
+/* ---------- Model de profunditat ---------- */
+async function getPipe(owner){
+  if(depthPipe) return depthPipe;
+  showStatus('Baixant el model de profunditat…', owner);
+  if(depthPipePromise) return depthPipePromise;
+  const device = (navigator.gpu ? 'webgpu' : 'wasm');
+  const dtype = device==='webgpu' ? 'fp16' : 'q8';
+  depthPipePromise = pipeline('depth-estimation','onnx-community/depth-anything-v2-small',{
+    device, dtype,
+    progress_callback: d=>{
+      if(owner !== statusOwner) return;
+      if(d.status==='progress' && d.total){
+        const p=Math.round((d.loaded/d.total)*100);
+        setPct(p, (d.file||'model')+' · '+p+'%', owner);
+      } else if(d.status==='download'){
+        $('st-msg').textContent='Baixant el model de profunditat…';
+      }
+    }
+  }).then(pipe=>{
+    depthPipe = pipe;
+    return pipe;
+  }).finally(()=>{ depthPipePromise = null; });
+  return depthPipePromise;
+}
+function loadTex(url){
+  return new Promise((res,rej)=>{
+    const l=new THREE.TextureLoader();
+    l.setCrossOrigin('anonymous');
+    l.load(url, res, undefined, rej);
+  });
+}
+function depthToCanvas(rawDepth){
+  const src = rawDepth.toCanvas ? rawDepth.toCanvas() : rawDepth;
+  const c=document.createElement('canvas');
+  c.width=src.width; c.height=src.height;
+  c.getContext('2d').drawImage(src,0,0);
+  return c;
+}
+function canvasToDepthTexture(canvas){
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+async function ensureDepth(item, token, force=false){
+  if(!item) return;
+  if(item.depthTex && !force){
+    if(token===loadToken){ depthTex=item.depthTex; buildSphere(colorTex, depthTex); hideStatus(token); }
+    return;
+  }
+  try{
+    item.status='processing';
+    renderGallery();
+    const pipe = await getPipe(token);
+    if(token===loadToken){ showStatus('Calculant la profunditat…', token); setPct(100, item.name, token); }
+    const result = await pipe(item.url);
+    item.depthCanvas = depthToCanvas(result.depth);
+    item.depthTex = canvasToDepthTexture(item.depthCanvas);
+    item.status='ready';
+    renderGallery();
+    if(token===loadToken && currentItem()===item){
+      depthTex = item.depthTex;
+      buildSphere(colorTex, depthTex);
+      hideStatus(token);
+      toast('Parallax avançat aplicat. Mou el ratolí, activa la rotació o entra en RV.');
+    }
+  }catch(e){
+    item.status='error';
+    renderGallery();
+    if(token===loadToken){ hideStatus(token); toast('No s\'ha pogut generar la profunditat: '+(e.message||e)); }
+  }
+}
+
+/* ---------- Controls de la barra ---------- */
+function updateUniforms(){
+  if(mesh && mesh.material && mesh.material.uniforms){
+    mesh.material.uniforms.depthScale.value=curIntensity;
+    mesh.material.uniforms.gamma.value=curGamma;
+    mesh.material.uniforms.invert.value=curInvert?1:0;
+  }
+}
+function setSliderFill(input, pct){ input.style.backgroundSize = pct+'% 100%'; }
+$('intensity').oninput=e=>{ curIntensity=parseFloat(e.target.value); setSliderFill(e.target, curIntensity/0.95*100); updateUniforms(); };
+$('contrast').oninput=e=>{ curGamma=parseFloat(e.target.value); setSliderFill(e.target, (curGamma-0.3)/1.2*100); updateUniforms(); };
+setSliderFill($('intensity'), curIntensity/0.95*100);
+setSliderFill($('contrast'), (curGamma-0.3)/1.2*100);
+$('invert').onclick=()=>{ curInvert=!curInvert; $('invert').classList.toggle('on',curInvert); updateUniforms(); markInteraction(true); };
+$('recompute').onclick=()=>{
+  const item=currentItem();
+  if(!item){ toast('Primer carrega una imatge.'); return; }
+  const token=++loadToken;
+  if(item.depthTex && item.depthTex.dispose) item.depthTex.dispose();
+  item.depthTex=null; item.depthCanvas=null;
+  item.status='new';
+  buildSphere(item.tex || colorTex, null);
+  ensureDepth(item, token, true);
+  markInteraction(true);
+};
+function updateRotateButton(){
+  const b=$('rotate');
+  b.classList.toggle('on', autoRotateState!==0);
+  b.classList.toggle('left', autoRotateState<0);
+  if(autoRotateState===0){ b.title='Rotació automàtica cap a la dreta'; b.setAttribute('aria-label','Activa la rotació automàtica cap a la dreta'); }
+  else if(autoRotateState>0){ b.title='Canvia la rotació cap a l\'esquerra'; b.setAttribute('aria-label','Canvia la rotació cap a l\'esquerra'); }
+  else { b.title='Atura la rotació automàtica'; b.setAttribute('aria-label','Atura la rotació automàtica'); }
+}
+$('rotate').onclick=()=>{
+  autoRotateState = autoRotateState===0 ? 1 : (autoRotateState>0 ? -1 : 0);
+  updateRotateButton();
+  markInteraction(true);
+};
+updateRotateButton();
+
+const fullBtn=$('full');
+fullBtn.onclick=()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); markInteraction(true); };
+document.addEventListener('fullscreenchange',()=>fullBtn.classList.toggle('on',!!document.fullscreenElement));
+$('pick').onclick=()=>fileInput.click();
+$('open').onclick=()=>fileInput.click();
+fileInput.onchange=e=>{ addFiles(e.target.files); fileInput.value=''; };
+
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowLeft') nextImage(-1);
+  else if(e.key==='ArrowRight') nextImage(1);
+  else if(e.key===' ' && sceneStarted){ e.preventDefault(); $('rotate').click(); }
+});
+
+/* ---------- WebXR + visió estèreo ---------- */
+const xrBtn=$('xr');
+if(navigator.xr && navigator.xr.isSessionSupported){
+  navigator.xr.isSessionSupported('immersive-vr').then(ok=>{
+    immersiveSupported = !!ok;
+    xrBtn.title = ok ? 'Entra en realitat virtual' : 'Visió estèreo en pantalla';
+  }).catch(()=>{ immersiveSupported=false; xrBtn.title='Visió estèreo en pantalla'; });
+} else {
+  xrBtn.title='Visió estèreo en pantalla';
+}
+function updateXRButton(){ xrBtn.classList.toggle('on', !!xrSession || sbsMode); }
+function toggleSbs(force){
+  sbsMode = typeof force === 'boolean' ? force : !sbsMode;
+  updateXRButton();
+  toast(sbsMode ? 'Visió estèreo en pantalla activada.' : 'Visió estèreo en pantalla desactivada.');
+  markInteraction(true);
+}
+xrBtn.onclick=async ()=>{
+  if(!renderer || !sceneStarted){ toast('Primer carrega una imatge.'); return; }
+  if(xrSession){ xrSession.end(); return; }
+  if(!immersiveSupported){ toggleSbs(); return; }
+  try{
+    sbsMode=false;
+    renderer.xr.setFramebufferScaleFactor?.(1.25);
+    const s=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});
+    xrSession=s;
+    await renderer.xr.setSession(s);
+    updateXRButton();
+    document.body.classList.add('ui-hidden');
+    toast('RV iniciada: WebXR genera una vista separada per a cada ull.');
+    s.addEventListener('selectstart',()=>markInteraction(true));
+    s.addEventListener('end',()=>{ xrSession=null; updateXRButton(); markInteraction(true); });
+  }catch(e){
+    toast('No s\'ha pogut iniciar la RV. S\'activa la visió estèreo en pantalla.');
+    toggleSbs(true);
+  }
+};
+
+/* ---------- Arrossegar i deixar anar ---------- */
+const dragOv=$('dragover'); let dd=0;
+addEventListener('dragenter',e=>{e.preventDefault();dd++;dragOv.classList.add('show');});
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('dragleave',e=>{e.preventDefault();if(--dd<=0){dd=0;dragOv.classList.remove('show');}});
+addEventListener('drop',e=>{e.preventDefault();dd=0;dragOv.classList.remove('show');addFiles(e.dataTransfer.files);});
+
+
+// Intenta carregar automàticament les fotos del repositori quan la pàgina s'obre.
+loadRepositoryGallery().catch(()=>{});
+</script>
+</body>
+</html>
